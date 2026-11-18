@@ -1,133 +1,374 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# hotel-booking-api
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+# Техническое задание
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+## Hotel Booking API
 
-## Description
+Приложение предназначено для бронирования номеров в отелях. Гость может просматривать каталог отелей, проверять свободные номера на выбранные даты, бронировать, оплачивать и отменять бронирования, а после проживания оставлять отзывы. Администратор управляет каталогом: странами, городами, отелями, удобствами, типами номеров и номерами. Приложение работает только как backend: весь доступ осуществляется через REST API, данные хранятся в базе данных `PostgreSQL`.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## 1. Структура приложения
 
-## Project setup
+### Сущности
 
-```bash
-$ npm install
+Приложение содержит следующие сущности:
+
+- `User` — пользователь системы (гость или администратор);
+- `Country` — страна;
+- `City` — город, принадлежит стране;
+- `Hotel` — отель, находится в городе;
+- `Amenity` — удобство отеля (Wi-Fi, парковка, бассейн и т. д.);
+- `RoomType` — тип номера в отеле (Standard, Deluxe, Suite) с вместимостью и ценой за ночь;
+- `Room` — конкретный номер определённого типа;
+- `Booking` — бронирование номера пользователем на период;
+- `BookingGuest` — человек, который будет проживать по бронированию;
+- `Payment` — оплата бронирования;
+- `Review` — отзыв об отеле после проживания;
+- избранные отели пользователя (таблица `favorites`).
+
+### Роли пользователей
+
+Роль хранится в поле `users.role`:
+
+- `guest` — назначается при регистрации; может бронировать, оплачивать и отменять свои бронирования, оставлять отзывы и вести список избранного;
+- `admin` — управляет каталогом, видит все бронирования и платежи, отмечает проживание завершённым, может отменить любое бронирование и удалить любой отзыв.
+
+Каталог (страны, города, отели, типы номеров, номера, удобства, отзывы) доступен для чтения без авторизации.
+
+### API-маршруты
+
+Все маршруты имеют префикс `/api`. Для защищённых маршрутов нужен заголовок `Authorization: Bearer <token>`.
+
+| Метод | URL | Доступ | Описание |
+| --- | --- | --- | --- |
+| POST | `/register` | все | регистрация (роль guest) |
+| POST | `/login` | все | вход, возвращает токен |
+| GET | `/me` | авторизованные | текущий пользователь |
+| POST | `/logout` | авторизованные | выход (удаление токена) |
+| GET | `/countries`, `/countries/{id}` | все | список и детали стран |
+| POST, PUT, DELETE | `/countries`, `/countries/{id}` | admin | управление странами |
+| GET | `/cities`, `/cities/{id}` | все | список и детали городов |
+| POST, PUT, DELETE | `/cities`, `/cities/{id}` | admin | управление городами |
+| GET | `/amenities`, `/amenities/{id}` | все | список удобств |
+| POST, PUT, DELETE | `/amenities`, `/amenities/{id}` | admin | управление удобствами |
+| GET | `/hotels`, `/hotels/{id}` | все | список и детали отелей |
+| POST, PUT, DELETE | `/hotels`, `/hotels/{id}` | admin | управление отелями |
+| GET | `/hotels/{id}/availability` | все | свободные номера (`check_in`, `check_out`, `guests`) |
+| GET | `/hotels/{id}/reviews` | все | отзывы об отеле |
+| GET | `/hotels/{id}/room-types`, `/room-types/{id}` | все | типы номеров |
+| POST | `/hotels/{id}/room-types` | admin | добавление типа номера |
+| PUT, DELETE | `/room-types/{id}` | admin | изменение и удаление типа номера |
+| GET | `/room-types/{id}/rooms`, `/rooms/{id}` | все | номера |
+| POST | `/room-types/{id}/rooms` | admin | добавление номера |
+| PUT, DELETE | `/rooms/{id}` | admin | изменение и удаление номера |
+| GET | `/bookings` | авторизованные | guest видит свои, admin видит все |
+| POST | `/bookings` | guest | создание бронирования |
+| GET | `/bookings/{id}` | владелец или admin | детали бронирования |
+| POST | `/bookings/{id}/pay` | владелец | оплата |
+| POST | `/bookings/{id}/cancel` | владелец или admin | отмена с возвратом оплаты |
+| POST | `/bookings/{id}/complete` | admin | завершение проживания |
+| POST | `/bookings/{id}/review` | владелец | отзыв после завершённого проживания |
+| DELETE | `/reviews/{id}` | автор или admin | удаление отзыва |
+| GET | `/payments` | admin | все платежи |
+| GET | `/favorites` | авторизованные | избранные отели |
+| POST | `/hotels/{id}/favorite` | авторизованные | добавить или убрать отель из избранного |
+
+### Основные компоненты
+
+Структура `src/` (модули NestJS, по одному на предметную область):
+
+- `main.ts` — точка входа, глобальный префикс `/api`, глобальные фильтры и пайпы.
+- `app.module.ts` — корневой модуль, подключает конфиг, базу данных и модули ниже.
+- `config/` — конфигурация из переменных окружения (`@nestjs/config`).
+- `database/` — подключение Drizzle (`@nestjs/drizzle`), схема (`schema/`), миграции (`migrations/`), сиды (`seeds/`).
+- `auth/` — регистрация, вход, выход, Bearer-токены и guards для ролей `guest` и `admin`.
+- `catalog/` — модули `countries`, `cities`, `amenities`, `hotels`, `room-types`, `rooms`: контроллеры, сервисы, DTO-схемы Zod.
+- `availability/` — поиск свободных номеров на даты.
+- `bookings/` — создание, оплата, отмена и завершение бронирований; бизнес-логика и транзакции.
+- `payments/` — просмотр платежей (admin).
+- `reviews/` — отзывы после проживания.
+- `favorites/` — избранные отели.
+- `common/` — общие декораторы, фильтры исключений (ошибки в JSON), утилиты.
+- `drizzle.config.ts` — настройки `drizzle-kit`.
+
+## 2. Технологии
+
+- Язык: `TypeScript 6` (проект в ESM, `"type": "module"`).
+- Среда выполнения: `Node.js 24`.
+- Фреймворк: `NestJS 12` на HTTP-адаптере `Express` (`@nestjs/platform-express`).
+- Тип приложения: `REST API` (только backend).
+- База данных: `PostgreSQL 17`.
+- ORM: `Drizzle ORM` через `@nestjs/drizzle`, миграции через `drizzle-kit`.
+- Валидация входящих данных: `Zod` через `StandardSchemaValidationPipe`.
+- Аутентификация: Bearer-токены через `@nestjs/authentication`.
+- Запуск базы данных: `Docker Compose`.
+- Frontend: отсутствует.
+
+Ключевые пакеты:
+
+- `@nestjs/common`, `@nestjs/core`, `@nestjs/platform-express`;
+- `@nestjs/config`, `@nestjs/drizzle`, `drizzle-orm`, `pg`, `drizzle-kit`;
+- `@nestjs/authentication`;
+- `zod`.
+
+## 3. Структура данных и примеры JSON
+
+### Таблицы базы данных
+
+| Таблица | Основные поля | Связи |
+| --- | --- | --- |
+| `users` | `name`, `email`, `password`, `phone`, `role` | 1:N с `bookings` и `reviews`; N:M с `hotels` через `favorites` |
+| `countries` | `name`, `code` | 1:N с `cities` |
+| `cities` | `country_id`, `name` | N:1 с `countries`; 1:N с `hotels` |
+| `hotels` | `city_id`, `name`, `description`, `address`, `stars` | N:1 с `cities`; 1:N с `room_types` и `reviews`; N:M с `amenities` |
+| `amenities` | `name` | N:M с `hotels` через `amenity_hotel` |
+| `room_types` | `hotel_id`, `name`, `capacity`, `price_per_night` | N:1 с `hotels`; 1:N с `rooms` |
+| `rooms` | `room_type_id`, `number`, `floor` | N:1 с `room_types`; 1:N с `bookings` |
+| `bookings` | `user_id`, `room_id`, `check_in`, `check_out`, `total_price`, `status` | N:1 с `users` и `rooms`; 1:N с `booking_guests`; 1:1 с `payments` и `reviews` |
+| `booking_guests` | `booking_id`, `first_name`, `last_name`, `birth_date` | N:1 с `bookings` |
+| `payments` | `booking_id`, `amount`, `method`, `status`, `paid_at` | 1:1 с `bookings` |
+| `reviews` | `user_id`, `hotel_id`, `booking_id`, `rating`, `comment` | N:1 с `users` и `hotels`; 1:1 с `bookings` |
+| `favorites` | `user_id`, `hotel_id`, `created_at` | связующая таблица `users` ↔ `hotels` |
+| `tokens` | `user_id`, `token_hash`, `created_at`, `expires_at` | N:1 с `users`; токен хранится в виде хеша, выход удаляет строку |
+
+Значения перечислений:
+
+- `users.role`: `guest`, `admin`;
+- `bookings.status`: `pending`, `confirmed`, `cancelled`, `completed`;
+- `payments.method`: `card`, `cash`, `bank_transfer`;
+- `payments.status`: `paid`, `refunded`.
+
+Ограничения на уровне базы данных:
+
+- уникальность: `users.email`, `countries.name`, `countries.code`, `(country_id, name)` в `cities`, `(hotel_id, name)` в `room_types`, `(room_type_id, number)` в `rooms`, `payments.booking_id`, `reviews.booking_id`;
+- `CHECK`: `stars` и `rating` от 1 до 5, `capacity > 0`, `price_per_night > 0`, `check_out > check_in`;
+- `EXCLUDE`: у одного номера не может быть двух неотменённых бронирований с пересекающимися датами;
+- внешние ключи: при удалении страны удаляются её города; город с отелями и номер с бронированиями удалить нельзя.
+
+### Примеры JSON
+
+Пример ответа `GET /api/hotels/1`:
+
+```json
+{
+  "data": {
+    "id": 1,
+    "name": "Spree Palace",
+    "description": "Отель в центре Берлина",
+    "address": "Unter den Linden 1",
+    "stars": 4,
+    "city_id": 1,
+    "city": {
+      "id": 1,
+      "name": "Berlin",
+      "country_id": 1,
+      "country": { "id": 1, "name": "Germany", "code": "DE" }
+    },
+    "rating": 4.3,
+    "reviews_count": 9,
+    "amenities": [
+      { "id": 1, "name": "Wi-Fi" },
+      { "id": 2, "name": "Parking" }
+    ],
+    "room_types": [
+      {
+        "id": 1,
+        "hotel_id": 1,
+        "name": "Standard",
+        "description": "Standard room",
+        "capacity": 2,
+        "price_per_night": "98.00",
+        "rooms_count": 5
+      }
+    ]
+  }
+}
 ```
 
-## Compile and run the project
+Пример запроса `POST /api/bookings`:
 
-```bash
-# development
-$ npm run start
-
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```json
+{
+  "room_id": 1,
+  "check_in": "2027-03-01",
+  "check_out": "2027-03-05",
+  "guests": [
+    { "first_name": "Ivan", "last_name": "Petrov", "birth_date": "1995-04-12" },
+    { "first_name": "Anna", "last_name": "Petrova" }
+  ]
+}
 ```
 
-## Run tests
+Пример ответа на создание бронирования:
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```json
+{
+  "data": {
+    "id": 553,
+    "status": "pending",
+    "check_in": "2027-03-01",
+    "check_out": "2027-03-05",
+    "nights": 4,
+    "total_price": "392.00",
+    "room": {
+      "id": 1,
+      "room_type_id": 1,
+      "number": "301",
+      "floor": 3,
+      "room_type": {
+        "id": 1,
+        "hotel_id": 1,
+        "name": "Standard",
+        "capacity": 2,
+        "price_per_night": "98.00"
+      }
+    },
+    "guests": [
+      { "id": 1, "first_name": "Ivan", "last_name": "Petrov", "birth_date": "1995-04-12" },
+      { "id": 2, "first_name": "Anna", "last_name": "Petrova", "birth_date": null }
+    ],
+    "payment": null,
+    "review": null,
+    "created_at": "2026-11-15T18:15:34.000000Z"
+  }
+}
 ```
 
-## Deployment
+Пример ответа с ошибкой при попытке забронировать занятый номер (`409 Conflict`):
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```json
+{
+  "message": "Room is not available for the selected dates."
+}
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+Дополнительно на сервере рассчитываются:
 
-## Observability
+- количество ночей и итоговая стоимость бронирования;
+- средний рейтинг отеля и количество отзывов;
+- минимальная цена за ночь в отеле;
+- количество номеров каждого типа;
+- количество свободных номеров на выбранные даты;
+- количество городов и отелей в стране.
 
-In production applications, observability is essential for understanding how your system behaves, detecting issues early, and maintaining reliable performance.
+## 4. План реализации требований
 
-[NestJS Observe](https://observe.nestjs.com) automatically instruments your NestJS application, giving you deep visibility into your system with minimal setup:
+### Обязательные требования
 
-- **Distributed tracing:** Follow requests across services and understand how they flow through your system.
-- **Waterfall analysis:** Visualize request execution and identify slow operations, bottlenecks, and unexpected delays.
-- **Performance analysis:** Analyze application performance in real time and quickly pinpoint areas that need optimization.
-- **Metrics:** Track key application and infrastructure metrics to understand system health and performance trends.
-- **Logging:** Centralize and correlate logs with traces and other telemetry to make debugging easier.
-- **Error tracking:** Detect errors quickly and investigate their root causes with the surrounding context.
-- **SLA monitoring:** Track service-level objectives and identify when your application is approaching or exceeding defined thresholds.
-- **Alarms and alerts:** Set up alerts for critical errors, performance degradation, SLA violations, and other anomalies so your team can react quickly.
+1. Аутентификация
 
-To add it to this project, run this and approve the code it prints at [observe.nestjs.com/link](https://observe.nestjs.com/link) - signing up for free if you have no account:
+- Пользователь может зарегистрироваться по имени, email и паролю (минимум 8 символов, с подтверждением).
+- Новый пользователь всегда получает роль `guest`; роль `admin` нельзя получить через API.
+- При входе возвращается токен, который передаётся в заголовке `Authorization`.
+- Запрос без токена к защищённому маршруту возвращает `401`.
+
+2. Управление каталогом
+
+- Администратор может создавать, изменять и удалять страны, города, удобства, отели, типы номеров и номера.
+- При создании отеля можно сразу указать список удобств (`amenity_ids`).
+- Гость при попытке изменить каталог получает `403`.
+- Каталог доступен для чтения без авторизации.
+
+3. Связи между сущностями
+
+- Каждая сущность связана с другими через внешние ключи.
+- Ответы API включают связанные данные (город и страна отеля, удобства, типы номеров).
+- Связанные данные загружаются заранее (eager loading), чтобы избежать проблемы N+1.
+
+4. Проверка свободных номеров
+
+- По отелю, датам заезда и выезда и количеству гостей возвращаются подходящие типы номеров.
+- Для каждого типа показывается количество свободных номеров и их список.
+- Дата выезда не считается занятой: один гость может выехать, а другой заехать в тот же день.
+
+5. Бронирование
+
+- Гость выбирает номер, даты и указывает список проживающих.
+- Количество проживающих не может превышать вместимость номера.
+- Дата заезда не может быть в прошлом, дата выезда должна быть позже даты заезда.
+- Стоимость рассчитывается на сервере и фиксируется в момент бронирования.
+- Если номер уже занят на эти даты, возвращается `409`.
+
+6. Жизненный цикл бронирования
+
+- Новое бронирование получает статус `pending`.
+- После оплаты статус меняется на `confirmed`.
+- Администратор переводит оплаченное бронирование в статус `completed` после выезда гостя.
+- Бронирование в статусе `pending` или `confirmed` можно отменить; оплата при этом получает статус `refunded`.
+
+7. Права доступа
+
+- Гость видит только свои бронирования, администратор видит все.
+- Оплатить бронирование может только его владелец.
+- Чужое бронирование для гостя недоступно (`404`).
+
+8. Валидация и ошибки
+
+- Все входящие данные проверяются перед сохранением.
+- Ошибки валидации возвращаются с кодом `422` и описанием по каждому полю.
+- Все ответы, включая ошибки, возвращаются в формате JSON.
+
+9. Тестовые данные
+
+- Seeders создают страны, города, отели, удобства, типы номеров, номера, пользователей, бронирования, платежи и отзывы.
+- Создаются тестовые аккаунты администратора и гостя.
+
+### Дополнительные требования
+
+1. Целостность данных на уровне базы
+
+- Ограничения `UNIQUE`, `CHECK` и внешние ключи дублируют правила приложения в базе данных.
+- `EXCLUDE`-ограничение PostgreSQL запрещает пересечение бронирований одного номера даже при одновременных запросах.
+- Попытка удалить запись, от которой зависят другие (город с отелями, номер с бронированиями), возвращает `409`.
+
+2. Транзакции
+
+- Бронирование, оплата, отмена и сохранение отеля с удобствами выполняются в одной транзакции.
+- При бронировании строка номера блокируется (`SELECT ... FOR UPDATE`).
+
+3. Отзывы
+
+- Отзыв можно оставить только по завершённому проживанию.
+- По одному бронированию можно оставить только один отзыв.
+- Оценка от 1 до 5, комментарий необязателен.
+- Удалить отзыв может автор или администратор.
+
+4. Платежи
+
+- У бронирования может быть только одна оплата.
+- Поддерживаются способы оплаты: карта, наличные, банковский перевод.
+- Оплата имитируется, реальная платёжная система не подключается.
+- Администратор может просмотреть список всех платежей.
+
+5. Избранное
+
+- Авторизованный пользователь может добавить отель в избранное или убрать его оттуда одним запросом.
+- Пользователь может просмотреть список своих избранных отелей.
+
+### Не входит в проект
+
+- Frontend-интерфейс.
+- Автоматические тесты.
+- Фильтрация, сортировка и пагинация списков.
+- Роли, кроме `guest` и `admin`.
+
+## 5. Запуск
 
 ```bash
-$ npx @nestjs/observe link
+docker compose up -d            # PostgreSQL 17 на localhost:5432
+npm install
+cp .env.example .env            # если .env ещё нет
+npm run db:migrate              # применить миграции Drizzle
+npm run db:seed                 # заполнить тестовыми данными
+npm run start:dev               # http://127.0.0.1:3000/api
 ```
 
-It installs `@nestjs/observe`, wires it into `AppModule` and `main.ts`, and writes the app key and secret into `.env`, which every `nest start` script (`start`, `start:dev`, `start:debug`) then loads. In production, set `OBSERVE_APP_KEY` and `OBSERVE_APP_SECRET` in the environment instead.
+Тестовые аккаунты (пароль `password`):
 
-Or do it by hand:
+| Email | Роль |
+| --- | --- |
+| admin@example.com | admin |
+| guest@example.com | guest |
 
-```bash
-$ npm install @nestjs/observe
-```
+Подключение к базе данных из DBeaver / DataGrip / TablePlus: `localhost:5432`, база `hotel_booking`, пользователь `hotel`, пароль `secret`.
 
-Then follow the [setup guide](https://docs.nestjs.com/observability/sdk) - it takes a single import and an app key.
-
-The free plan needs no payment details and covers 300,000 events a month. You can also browse the [live demo](https://www.observe-demo.nestjs.com/dashboard) first - the whole dashboard over a busy service's data, with nothing to install.
-
-## Resources
-
-Check out a few resources that may come in handy when working with NestJS:
-
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Auto-instrument your application with [NestJS Observe](https://observe.nestjs.com). Distributed tracing, metrics, and logging made easy. Error tracking and performance monitoring for your NestJS applications.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
-
-## Support
-
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
-
-## Stay in touch
-
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
-
-## License
-
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
-# hotel_booking
+Коды ответов: `200/201` — успех, `204` — запись удалена, `401` — нет токена, `403` — нет прав, `404` — не найдено, `409` — конфликт, `422` — ошибка валидации.
